@@ -48,5 +48,12 @@
             "course_id": 1
         }
     ],
-    "results": []
+    "results": [
+        {
+            "student_id": 2,
+            "course_id": 1,
+            "score": 0.0,
+            "passed": false
+        }
+    ]
 }
