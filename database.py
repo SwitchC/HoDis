@@ -1,4 +1,3 @@
-# database.py
 import json
 import os
 
@@ -11,9 +10,10 @@ def init_db():
                 {"id": 1, "username": "teacher1", "password": "123", "role": "teacher"},
                 {"id": 2, "username": "student1", "password": "123", "role": "student"}
             ],
-            "courses": [],     # Тут будуть зберігатися курси та тести
-            "enrollments": [], # Записи: який студент на який курс підписався
-            "results": []      # Оцінки: хто, який курс, скільки балів
+            "courses": [],     # Формат: {"id": 1, "teacher_id": 1, "title": "Назва курсу"}
+            "tests": [],       # Формат: {"id": 1, "course_id": 1, "title": "Назва тесту", "questions": [...]}
+            "enrollments": [], # Формат: {"student_id": 2, "course_id": 1}
+            "results": []      # Формат: {"student_id": 2, "test_id": 1, "score": 80, "passed": True}
         }
         save_db(initial_data)
 
