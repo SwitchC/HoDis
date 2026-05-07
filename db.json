@@ -1,0 +1,20 @@
+{
+    "users": [
+        {
+            "id": 1,
+            "username": "teacher1",
+            "password": "123",
+            "role": "teacher"
+        },
+        {
+            "id": 2,
+            "username": "student1",
+            "password": "123",
+            "role": "student"
+        }
+    ],
+    "courses": [],
+    "tests": [],
+    "enrollments": [],
+    "results": []
+}
