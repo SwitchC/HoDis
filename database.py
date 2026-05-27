@@ -90,17 +90,6 @@ def delete_user(user_id):
     save_db(db)
     return True
 
-def create_default_admin():
-    db = load_db()
-    if not any(u.get('role') == 'admin' for u in db.get('users', [])):
-        users = db.get('users', [])
-        admin_id = 1 if not users else max(u['id'] for u in users) + 1
-        db['users'].append({
-            "id": admin_id, "username": "admin1", "password": hash_password("123"),
-            "role": "admin", "is_blocked": False
-        })
-        save_db(db)
-
 def add_material_to_course(course_id: int, file_name: str, file_path: str):
     db = load_db()
     for course in db.get('courses', []):
@@ -161,21 +150,32 @@ def grade_task(submission_id: int, score: int):
             return True
     return False
 
-# --- НОВІ ФУНКЦІЇ ДЛЯ ВИДАЛЕННЯ ---
 def delete_test(test_id: int):
     db = load_db()
-    # Видаляємо сам тест
     db['tests'] = [t for t in db.get('tests', []) if t['id'] != test_id]
-    # Видаляємо результати цього тесту
     db['results'] = [r for r in db.get('results', []) if r.get('test_id') != test_id]
     save_db(db)
     return True
 
 def delete_practical_task(task_id: int):
     db = load_db()
-    # Видаляємо завдання
     db['practical_tasks'] = [t for t in db.get('practical_tasks', []) if t['id'] != task_id]
-    # Видаляємо роботи студентів до цього завдання
     db['task_submissions'] = [s for s in db.get('task_submissions', []) if s.get('task_id') != task_id]
+    save_db(db)
+    return True
+
+# --- НОВА ФУНКЦІЯ ДЛЯ ЗБЕРЕЖЕННЯ ДЕТАЛЬНИХ РЕЗУЛЬТАТІВ ТЕСТУ ---
+def save_detailed_test_result(student_id: int, test_id: int, score: float, passed: bool, details: list):
+    """Зберігає не лише бал, а й масив відповідей з витраченим часом (FR5)."""
+    db = load_db()
+    result_record = {
+        "id": len(db.get("results", [])) + 1,
+        "student_id": student_id,
+        "test_id": test_id,
+        "score": score,
+        "passed": passed,
+        "details": details  # Тут зберігається весь масив
+    }
+    db.setdefault("results", []).append(result_record)
     save_db(db)
     return True

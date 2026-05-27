@@ -3,10 +3,62 @@ import shutil
 from PyQt5.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, 
                              QLineEdit, QPushButton, QComboBox, QListWidget, 
                              QMessageBox, QTabWidget, QFileDialog, QListWidgetItem,
-                             QTextEdit, QDialog, QFormLayout, QDialogButtonBox)
-from PyQt5.QtGui import QDesktopServices
+                             QTextEdit, QDialog, QFormLayout, QDialogButtonBox, 
+                             QTableWidget, QTableWidgetItem, QHeaderView)
+from PyQt5.QtGui import QDesktopServices, QColor
 from PyQt5.QtCore import QUrl
 import database
+
+# --- НОВЕ ВІКНО ДЛЯ ПЕРЕГЛЯДУ ДЕТАЛЕЙ ТЕСТУ ---
+class ResultDetailsDialog(QDialog):
+    def __init__(self, parent, result_data, student_name):
+        super().__init__(parent)
+        self.setWindowTitle(f"Деталізація результату: {student_name}")
+        self.resize(700, 450)
+        
+        layout = QVBoxLayout(self)
+        
+        status_text = "Склав" if result_data.get('passed') else "Не склав"
+        lbl = QLabel(f"<b>Оцінка:</b> {result_data.get('score')}% | <b>Статус:</b> {status_text}")
+        layout.addWidget(lbl)
+        
+        self.table = QTableWidget()
+        details = result_data.get('details', [])
+        
+        if not details:
+            layout.addWidget(QLabel("<i>Детальна інформація відсутня (стара спроба).</i>"))
+        else:
+            self.table.setColumnCount(4)
+            self.table.setRowCount(len(details))
+            self.table.setHorizontalHeaderLabels(["Питання", "Відповідь студента", "Правильна відповідь", "Час (с)"])
+            self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+            
+            for i, row in enumerate(details):
+                q_item = QTableWidgetItem(row.get('question', ''))
+                
+                s_ans = row.get('student_answer', '')
+                c_ans = row.get('correct_answer', '')
+                
+                s_item = QTableWidgetItem(s_ans)
+                if not row.get('is_correct', False):
+                    s_item.setForeground(QColor("red"))
+                else:
+                    s_item.setForeground(QColor("green"))
+                    
+                c_item = QTableWidgetItem(c_ans)
+                t_item = QTableWidgetItem(str(row.get('time_spent_sec', 0)))
+                
+                self.table.setItem(i, 0, q_item)
+                self.table.setItem(i, 1, s_item)
+                self.table.setItem(i, 2, c_item)
+                self.table.setItem(i, 3, t_item)
+                
+            layout.addWidget(self.table)
+            
+        btn = QPushButton("Закрити")
+        btn.clicked.connect(self.accept)
+        layout.addWidget(btn)
 
 class TaskGradeDialog(QDialog):
     def __init__(self, parent=None, sub_data=None, task_title=""):
@@ -37,7 +89,6 @@ class TaskGradeDialog(QDialog):
 
     def get_score(self):
         return self.score_input.text().strip()
-
 
 class TeacherDashboard(QWidget):
     def __init__(self, user_data):
@@ -72,15 +123,12 @@ class TeacherDashboard(QWidget):
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.refresh_combo_boxes()
 
-    # --- Вкладка 1: КУРСИ ТА МАТЕРІАЛИ (Двоколонковий дизайн) ---
+    # Вкладка 1: КУРСИ ТА МАТЕРІАЛИ
     def setup_course_tab(self):
         main_course_layout = QHBoxLayout()
-        
-        # ЛІВА КОЛОНКА: Створення курсу та завантаження файлів
         left_layout = QVBoxLayout()
         left_layout.addWidget(QLabel("<b>1. Назва нового курсу:</b>"))
         self.course_title_input = QLineEdit()
-        self.course_title_input.setPlaceholderText("Наприклад: Основи Python")
         left_layout.addWidget(self.course_title_input)
         
         self.create_course_btn = QPushButton("СТВОРИТИ КУРС")
@@ -96,11 +144,9 @@ class TeacherDashboard(QWidget):
         self.upload_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px; font-weight: bold;")
         self.upload_btn.clicked.connect(self.upload_material)
         left_layout.addWidget(self.upload_btn)
-        
-        left_layout.addStretch() # Відштовхує елементи вгору
+        left_layout.addStretch()
         main_course_layout.addLayout(left_layout, 1)
         
-        # ПРАВА КОЛОНКА: Перегляд та управління матеріалами
         right_layout = QVBoxLayout()
         right_layout.addWidget(QLabel("<b>3. Управління матеріалами курсу:</b>"))
         self.manage_course_combo = QComboBox()
@@ -122,7 +168,6 @@ class TeacherDashboard(QWidget):
         
         right_layout.addLayout(mat_btn_layout)
         main_course_layout.addLayout(right_layout, 1)
-        
         self.tab_course.setLayout(main_course_layout)
 
     def create_course(self):
@@ -138,10 +183,7 @@ class TeacherDashboard(QWidget):
 
     def upload_material(self):
         course_id = self.upload_course_combo.currentData()
-        if not course_id:
-            QMessageBox.warning(self, "Помилка", "Спершу створіть та оберіть курс!")
-            return
-            
+        if not course_id: return
         file_path, _ = QFileDialog.getOpenFileName(self, "Оберіть файл", "", "Матеріали (*.pdf *.docx *.mp4 *.png *.txt)")
         if file_path:
             if not os.path.exists(database.UPLOAD_DIR): os.makedirs(database.UPLOAD_DIR)
@@ -150,8 +192,7 @@ class TeacherDashboard(QWidget):
             try:
                 shutil.copy2(file_path, dest_path)
                 database.add_material_to_course(course_id, file_name, dest_path)
-                QMessageBox.information(self, "Успіх", f"Файл '{file_name}' успішно завантажено!")
-                self.load_course_materials() # Оновлюємо список
+                self.load_course_materials()
             except Exception as e:
                 QMessageBox.critical(self, "Помилка", f"Не вдалося скопіювати файл:\n{e}")
 
@@ -169,30 +210,21 @@ class TeacherDashboard(QWidget):
 
     def open_material(self):
         selected = self.materials_list.currentItem()
-        if not selected:
-            QMessageBox.warning(self, "Увага", "Оберіть файл зі списку справа!")
-            return
+        if not selected: return
         file_path = selected.data(32)
         if os.path.exists(file_path): QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(file_path)))
 
     def delete_material(self):
         selected = self.materials_list.currentItem()
-        if not selected:
-            QMessageBox.warning(self, "Увага", "Оберіть файл для видалення зі списку справа!")
-            return
+        if not selected: return
         course_id = self.manage_course_combo.currentData()
         file_path = selected.data(32)
-        
-        confirm = QMessageBox.question(self, "Підтвердження", "Видалити цей файл назавжди?", QMessageBox.Yes | QMessageBox.No)
-        if confirm == QMessageBox.Yes:
-            database.delete_material_from_course(course_id, file_path)
-            QMessageBox.information(self, "Успіх", "Файл видалено.")
-            self.load_course_materials()
+        database.delete_material_from_course(course_id, file_path)
+        self.load_course_materials()
 
-    # --- Вкладка 2: УПРАВЛІННЯ ТЕСТАМИ ---
+    # Вкладка 2: УПРАВЛІННЯ ТЕСТАМИ
     def setup_test_tab(self):
         main_test_layout = QHBoxLayout()
-        
         left_layout = QVBoxLayout()
         left_layout.addWidget(QLabel("<b>1. Оберіть курс:</b>"))
         self.test_course_combo = QComboBox()
@@ -285,16 +317,15 @@ class TeacherDashboard(QWidget):
         selected = self.existing_tests_list.currentItem()
         if not selected: return
         test_id = selected.data(32)
-        confirm = QMessageBox.question(self, "Підтвердження", "Видалити цей тест?\nУсі результати студентів також будуть видалені!", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "Підтвердження", "Видалити цей тест?", QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:
             database.delete_test(test_id)
             self.load_existing_tests()
             self.update_stats_data()
 
-    # --- Вкладка 3: УПРАВЛІННЯ ПРАКТИЧНИМИ ЗАВДАННЯМИ ---
+    # Вкладка 3: УПРАВЛІННЯ ПРАКТИЧНИМИ ЗАВДАННЯМИ
     def setup_tasks_tab(self):
         main_task_layout = QHBoxLayout()
-        
         left_layout = QVBoxLayout()
         left_layout.addWidget(QLabel("<b>1. Оберіть курс:</b>"))
         self.task_course_combo = QComboBox()
@@ -313,7 +344,6 @@ class TeacherDashboard(QWidget):
         self.save_task_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px; font-weight: bold;")
         self.save_task_btn.clicked.connect(self.save_practical_task)
         left_layout.addWidget(self.save_task_btn)
-        
         main_task_layout.addLayout(left_layout, 2)
         
         right_layout = QVBoxLayout()
@@ -325,7 +355,6 @@ class TeacherDashboard(QWidget):
         self.delete_task_btn.setStyleSheet("background-color: #f44336; color: white; padding: 10px; font-weight: bold;")
         self.delete_task_btn.clicked.connect(self.delete_practical_task)
         right_layout.addWidget(self.delete_task_btn)
-        
         main_task_layout.addLayout(right_layout, 1)
         self.tab_tasks.setLayout(main_task_layout)
 
@@ -335,7 +364,6 @@ class TeacherDashboard(QWidget):
         desc = self.task_desc_input.toPlainText().strip()
         if not course_id or not title or not desc: return
         database.add_practical_task(course_id, title, desc)
-        QMessageBox.information(self, "Успіх", f"Завдання додано!\n🔔 Email-сповіщення надіслано.")
         self.task_title_input.clear()
         self.task_desc_input.clear()
         self.load_existing_tasks()
@@ -355,13 +383,13 @@ class TeacherDashboard(QWidget):
         selected = self.existing_tasks_list.currentItem()
         if not selected: return
         task_id = selected.data(32)
-        confirm = QMessageBox.question(self, "Підтвердження", "Видалити це завдання?\nУсі роботи студентів також будуть видалені!", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "Підтвердження", "Видалити це завдання?", QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:
             database.delete_practical_task(task_id)
             self.load_existing_tasks()
             self.update_stats_data()
 
-    # --- Вкладка 4: СТАТИСТИКА ТА ПЕРЕВІРКА ---
+    # --- ОНОВЛЕНА Вкладка 4: СТАТИСТИКА ТА ПЕРЕВІРКА ---
     def setup_stats_tab(self):
         layout = QVBoxLayout()
         layout.addWidget(QLabel("<b>Оберіть курс для аналізу:</b>"))
@@ -369,6 +397,7 @@ class TeacherDashboard(QWidget):
         self.stats_course_combo.currentIndexChanged.connect(self.update_stats_data)
         layout.addWidget(self.stats_course_combo)
         
+        # Блок тестів з новою кнопкою деталізації
         layout.addWidget(QLabel("<hr><b>Статистика автоматичних тестів:</b>"))
         self.stats_test_combo = QComboBox()
         self.stats_test_combo.currentIndexChanged.connect(self.load_test_statistics)
@@ -377,6 +406,12 @@ class TeacherDashboard(QWidget):
         self.stats_list = QListWidget()
         layout.addWidget(self.stats_list)
         
+        self.view_details_btn = QPushButton("🔍 Переглянути деталі спроби")
+        self.view_details_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 8px; font-weight: bold;")
+        self.view_details_btn.clicked.connect(self.view_test_details)
+        layout.addWidget(self.view_details_btn)
+        
+        # Блок ручної перевірки завдань
         layout.addWidget(QLabel("<hr><b>Роботи студентів на перевірці:</b>"))
         self.submissions_list = QListWidget()
         layout.addWidget(self.submissions_list)
@@ -411,7 +446,22 @@ class TeacherDashboard(QWidget):
         results = [r for r in db.get("results", []) if r["test_id"] == test_id]
         users = {u["id"]: u["username"] for u in db.get("users", [])}
         for r in results:
-            self.stats_list.addItem(f"Студент: {users.get(r['student_id'], 'Невідомий')} | Оцінка: {r['score']}%")
+            student_name = users.get(r['student_id'], 'Невідомий')
+            item = QListWidgetItem(f"Студент: {student_name} | Оцінка: {r['score']}%")
+            item.setData(32, r) # Зберігаємо весь об'єкт результату (включаючи масив деталей)
+            item.setData(33, student_name)
+            self.stats_list.addItem(item)
+
+    def view_test_details(self):
+        selected = self.stats_list.currentItem()
+        if not selected:
+            QMessageBox.warning(self, "Увага", "Оберіть результат зі списку для деталізації!")
+            return
+            
+        result_data = selected.data(32)
+        student_name = selected.data(33)
+        dialog = ResultDetailsDialog(self, result_data, student_name)
+        dialog.exec_()
 
     def load_submissions(self):
         self.submissions_list.clear()
@@ -436,24 +486,19 @@ class TeacherDashboard(QWidget):
     def grade_submission(self):
         selected = self.submissions_list.currentItem()
         if not selected: return
-            
         sub_data = selected.data(32)
         task_title = selected.data(33)
-        
         dialog = TaskGradeDialog(self, sub_data, task_title)
         if dialog.exec_() == QDialog.Accepted:
             score_str = dialog.get_score()
             if not score_str.isdigit(): return
-                
             database.grade_task(sub_data["id"], int(score_str))
             self.load_submissions()
 
-    # --- Загальні методи ---
     def on_tab_changed(self, index):
         self.refresh_combo_boxes()
 
     def refresh_combo_boxes(self):
-        # Блокуємо сигнали, щоб запобігти зайвим викликам функцій під час оновлення списків
         self.upload_course_combo.blockSignals(True)
         self.manage_course_combo.blockSignals(True)
         self.test_course_combo.blockSignals(True)

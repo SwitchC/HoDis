@@ -1,4 +1,5 @@
 import os
+import time  # Додали для заміру часу проходження
 from PyQt5.QtWidgets import (QWidget, QLabel, QVBoxLayout, QListWidget, 
                              QPushButton, QMessageBox, QListWidgetItem,
                              QDialog, QRadioButton, QButtonGroup, QHBoxLayout, QTextEdit)
@@ -7,7 +8,6 @@ from PyQt5.QtCore import QUrl
 import database
 import core
 
-# --- ВІКНО ПРАКТИЧНОГО ЗАВДАННЯ (UR2) ---
 class TaskSubmissionDialog(QDialog):
     def __init__(self, parent, student_id, task_data, existing_submission):
         super().__init__(parent)
@@ -33,7 +33,6 @@ class TaskSubmissionDialog(QDialog):
         self.submit_btn.clicked.connect(self.submit_task)
         layout.addWidget(self.submit_btn)
         
-        # Якщо вже є відповідь, завантажуємо її
         if existing_submission:
             self.answer_input.setText(existing_submission["answer_text"])
             if existing_submission["status"] == "Оцінено":
@@ -49,13 +48,11 @@ class TaskSubmissionDialog(QDialog):
         if not answer:
             QMessageBox.warning(self, "Помилка", "Відповідь не може бути порожньою!")
             return
-            
         database.submit_task(self.student_id, self.task["id"], answer)
         QMessageBox.information(self, "Успіх", "Вашу відповідь надіслано викладачу на перевірку!")
         self.accept()
 
-
-# --- ВІКНО ПРОХОДЖЕННЯ ТЕСТУ ---
+# --- ОНОВЛЕНЕ ВІКНО ПРОХОДЖЕННЯ ТЕСТУ З ДЕТАЛІЗАЦІЄЮ (FR5) ---
 class TestExecutionWindow(QDialog):
     def __init__(self, student_id, test_data):
         super().__init__()
@@ -64,6 +61,10 @@ class TestExecutionWindow(QDialog):
         self.questions = test_data["questions"]
         self.current_q_index = 0
         self.correct_answers = 0
+        
+        # Масив для зберігання деталізованої історії
+        self.detailed_results = []
+        self.q_start_time = 0 
 
         self.setWindowTitle(f"Тест: {self.test['title']}")
         self.resize(500, 350)
@@ -103,6 +104,9 @@ class TestExecutionWindow(QDialog):
 
             if self.current_q_index == len(self.questions) - 1:
                 self.next_btn.setText("Завершити тест")
+                
+            # Запускаємо таймер для поточного питання
+            self.q_start_time = time.time()
         else:
             self.finish_test()
 
@@ -112,9 +116,22 @@ class TestExecutionWindow(QDialog):
             QMessageBox.warning(self, "Увага", "Оберіть один із варіантів відповіді!")
             return
 
-        correct_id = self.questions[self.current_q_index]["correct_index"]
-        if selected_id == correct_id:
+        time_spent = round(time.time() - self.q_start_time, 1)
+        q_data = self.questions[self.current_q_index]
+        correct_id = q_data["correct_index"]
+        
+        is_correct = (selected_id == correct_id)
+        if is_correct:
             self.correct_answers += 1
+
+        # ЗАПИСУЄМО ДЕТАЛІ
+        self.detailed_results.append({
+            "question": q_data["question"],
+            "correct_answer": q_data["options"][correct_id],
+            "student_answer": q_data["options"][selected_id],
+            "is_correct": is_correct,
+            "time_spent_sec": time_spent
+        })
 
         self.current_q_index += 1
         self.load_question()
@@ -124,20 +141,14 @@ class TestExecutionWindow(QDialog):
         score = core.calculate_score(self.correct_answers, total)
         passed = core.check_pass_status(score)
 
-        db = database.load_db()
-        result_record = {
-            "student_id": self.student_id, "test_id": self.test["id"], 
-            "score": score, "passed": passed
-        }
-        db.setdefault("results", []).append(result_record)
-        database.save_db(db)
+        # Викликаємо нову функцію збереження з масивом деталей
+        database.save_detailed_test_result(self.student_id, self.test["id"], score, passed, self.detailed_results)
 
         status_text = "Складено успішно!" if passed else "Не складено. Спробуйте ще."
         QMessageBox.information(self, "Результат", f"Тест завершено!\nПравильних відповідей: {self.correct_answers} з {total}\nВаш бал: {score}%\nСтатус: {status_text}")
         self.accept()
 
 
-# --- ДАШБОРД СТУДЕНТА ---
 class StudentDashboard(QWidget):
     def __init__(self, user_data):
         super().__init__()
@@ -165,7 +176,6 @@ class StudentDashboard(QWidget):
         h_layout.addLayout(v_left)
         
         v_right = QVBoxLayout()
-        
         v_right.addWidget(QLabel("<b>Навчальні матеріали:</b>"))
         self.materials_list = QListWidget()
         v_right.addWidget(self.materials_list)
@@ -182,7 +192,6 @@ class StudentDashboard(QWidget):
         self.start_test_btn.clicked.connect(self.start_test)
         v_right.addWidget(self.start_test_btn)
         
-        # НОВИЙ БЛОК: Практичні завдання (UR2)
         v_right.addWidget(QLabel("<hr><b>Відкриті практичні завдання:</b>"))
         self.tasks_list = QListWidget()
         v_right.addWidget(self.tasks_list)
@@ -236,7 +245,6 @@ class StudentDashboard(QWidget):
         course_id = selected.data(32)
         db = database.load_db()
         
-        # Матеріали
         for course in db.get("courses", []):
             if course["id"] == course_id:
                 for mat in course.get("materials", []):
@@ -245,14 +253,12 @@ class StudentDashboard(QWidget):
                     self.materials_list.addItem(item)
                 break
                 
-        # Тести
         for test in db.get("tests", []):
             if test["course_id"] == course_id:
                 item = QListWidgetItem(f"{test['title']} (Питань: {len(test['questions'])})")
                 item.setData(32, test['id'])
                 self.tests_list.addItem(item)
                 
-        # Практичні завдання (UR2)
         student_submissions = {s["task_id"]: s for s in db.get("task_submissions", []) if s["student_id"] == self.user["id"]}
         
         for task in db.get("practical_tasks", []):
@@ -264,7 +270,7 @@ class StudentDashboard(QWidget):
                     
                 item = QListWidgetItem(f"[{status_text}] {task['title']}")
                 item.setData(32, task)
-                item.setData(33, student_submissions.get(task["id"])) # Передаємо існуючу відповідь, якщо є
+                item.setData(33, student_submissions.get(task["id"]))
                 self.tasks_list.addItem(item)
 
     def open_material(self):
@@ -284,13 +290,9 @@ class StudentDashboard(QWidget):
 
     def open_practical_task(self):
         selected = self.tasks_list.currentItem()
-        if not selected:
-            QMessageBox.warning(self, "Увага", "Оберіть практичне завдання зі списку!")
-            return
-            
+        if not selected: return
         task_data = selected.data(32)
         submission_data = selected.data(33)
-        
         dialog = TaskSubmissionDialog(self, self.user["id"], task_data, submission_data)
         if dialog.exec_() == QDialog.Accepted:
-            self.load_course_content() # Оновлюємо список, щоб побачити статус "На перевірці"
+            self.load_course_content()
