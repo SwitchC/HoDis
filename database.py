@@ -1,28 +1,56 @@
 import json
+import hashlib
 import os
 
-DB_FILE = "db.json"
+DB_FILE = 'db.json'
 
 def init_db():
     if not os.path.exists(DB_FILE):
-        initial_data = {
-            "users": [
-                {"id": 1, "username": "teacher1", "password": "123", "role": "teacher"},
-                {"id": 2, "username": "student1", "password": "123", "role": "student"}
-            ],
-            "courses": [],     # Формат: {"id": 1, "teacher_id": 1, "title": "Назва курсу"}
-            "tests": [],       # Формат: {"id": 1, "course_id": 1, "title": "Назва тесту", "questions": [...]}
-            "enrollments": [], # Формат: {"student_id": 2, "course_id": 1}
-            "results": []      # Формат: {"student_id": 2, "test_id": 1, "score": 80, "passed": True}
-        }
-        save_db(initial_data)
+        data = {"users": [], "courses": [], "tests": [], "results": []}
+        with open(DB_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+        print("Базу даних ініціалізовано.")
 
 def load_db():
     if not os.path.exists(DB_FILE):
         init_db()
-    with open(DB_FILE, 'r', encoding='utf-8') as file:
-        return json.load(file)
+    
+    with open(DB_FILE, 'r', encoding='utf-8') as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return {"users": [], "courses": [], "tests": [], "results": []}
 
 def save_db(data):
-    with open(DB_FILE, 'w', encoding='utf-8') as file:
-        json.dump(data, file, indent=4, ensure_ascii=False)
+    with open(DB_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+def get_user_by_credentials(username, password):
+    db = load_db()
+    hashed_pw = hash_password(password)
+    
+    for user in db.get('users', []):
+        if user.get('username') == username and user.get('password') == hashed_pw:
+            return user
+    return None
+
+def migrate_passwords():
+    db = load_db()
+    changed = False
+    
+    for user in db.get('users', []):
+        if len(user.get('password', '')) < 64:
+            user['password'] = hash_password(user['password'])
+            changed = True
+            
+    if changed:
+        save_db(db)
+        print("Успіх: Всі старі паролі в db.json успішно захешовані!")
+    else:
+        print("Міграція не потрібна: Паролі вже захешовані.")
+
+if __name__ == "__main__":
+    migrate_passwords()

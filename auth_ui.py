@@ -1,42 +1,62 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
+import sys
+from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel,
+                             QLineEdit, QPushButton, QMessageBox)
 from PyQt5.QtCore import pyqtSignal
-import database
+from database import get_user_by_credentials
 
 class LoginWindow(QWidget):
-    # Створюємо сигнал, який буде передавати словник з даними користувача
-    login_successful = pyqtSignal(dict) 
+    login_successful = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("HoDis - Авторизація")
-        self.resize(300, 150)
-        
+        self.resize(350, 200)
+        self.setup_ui()
+
+    def setup_ui(self):
         layout = QVBoxLayout()
-        
+
+        self.username_label = QLabel("Логін:")
         self.username_input = QLineEdit()
-        self.username_input.setPlaceholderText("Логін (наприклад: teacher1)")
-        layout.addWidget(self.username_input)
-        
+        self.username_input.setPlaceholderText("Введіть логін (напр. teacher1)")
+
+        self.password_label = QLabel("Пароль:")
         self.password_input = QLineEdit()
-        self.password_input.setPlaceholderText("Пароль (наприклад: 123)")
-        self.password_input.setEchoMode(QLineEdit.Password) 
+        self.password_input.setPlaceholderText("Введіть пароль")
+        self.password_input.setEchoMode(QLineEdit.Password)
+
+        self.login_button = QPushButton("Увійти")
+        self.login_button.clicked.connect(self.handle_login)
+
+        layout.addWidget(self.username_label)
+        layout.addWidget(self.username_input)
+        layout.addWidget(self.password_label)
         layout.addWidget(self.password_input)
-        
-        self.login_btn = QPushButton("Увійти")
-        self.login_btn.clicked.connect(self.check_credentials)
-        layout.addWidget(self.login_btn)
-        
+        layout.addWidget(self.login_button)
+
         self.setLayout(layout)
 
-    def check_credentials(self):
+        self.username_input.returnPressed.connect(self.login_button.click)
+        self.password_input.returnPressed.connect(self.login_button.click)
+
+    def handle_login(self):
         username = self.username_input.text().strip()
         password = self.password_input.text().strip()
-        
-        db = database.load_db()
-        for user in db["users"]:
-            if user["username"] == username and user["password"] == password:
-                self.login_successful.emit(user)
-                self.close()
-                return
-        
-        QMessageBox.warning(self, "Помилка", "Невірний логін або пароль!")
+
+        if not username or not password:
+            QMessageBox.warning(self, "Помилка", "Будь ласка, заповніть всі поля.")
+            return
+
+        user = get_user_by_credentials(username, password)
+
+        if user:
+            self.login_successful.emit(user)
+            self.close()
+        else:
+            QMessageBox.critical(self, "Помилка доступу", "Невірний логін або пароль.")
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = LoginWindow()
+    window.show()
+    sys.exit(app.exec_())
