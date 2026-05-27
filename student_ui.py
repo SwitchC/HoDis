@@ -1,6 +1,9 @@
+import os
 from PyQt5.QtWidgets import (QWidget, QLabel, QVBoxLayout, QListWidget, 
                              QPushButton, QMessageBox, QListWidgetItem,
                              QDialog, QRadioButton, QButtonGroup, QHBoxLayout)
+from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtCore import QUrl
 import database
 import core
 
@@ -77,11 +80,11 @@ class TestExecutionWindow(QDialog):
         db = database.load_db()
         result_record = {
             "student_id": self.student_id,
-            "test_id": self.test["id"], # ТЕПЕР ЗБЕРІГАЄМО ID ТЕСТУ
+            "test_id": self.test["id"], 
             "score": score,
             "passed": passed
         }
-        db["results"].append(result_record)
+        db.setdefault("results", []).append(result_record)
         database.save_db(db)
 
         status_text = "Складено успішно!" if passed else "Не складено. Спробуйте ще."
@@ -99,7 +102,7 @@ class StudentDashboard(QWidget):
         super().__init__()
         self.user = user_data
         self.setWindowTitle(f"HoDis - Панель Студента ({self.user['username']})")
-        self.resize(600, 600)
+        self.resize(750, 600)
         
         self.layout = QVBoxLayout()
         
@@ -114,20 +117,31 @@ class StudentDashboard(QWidget):
         
         self.layout.addWidget(QLabel("<hr>"))
         
-        # 2. Мої курси та тести в них (горизонтальний блок)
+        # 2. Мої курси та контент (горизонтальний блок)
         h_layout = QHBoxLayout()
         
         # Ліва колонка: Мої курси
         v_left = QVBoxLayout()
         v_left.addWidget(QLabel("<b>Мої курси:</b>"))
         self.my_courses_list = QListWidget()
-        self.my_courses_list.itemSelectionChanged.connect(self.load_course_tests) # При кліку вантажимо тести
+        self.my_courses_list.itemSelectionChanged.connect(self.load_course_content) 
         v_left.addWidget(self.my_courses_list)
         h_layout.addLayout(v_left)
         
-        # Права колонка: Тести обраного курсу
+        # Права колонка: Матеріали та Тести
         v_right = QVBoxLayout()
-        v_right.addWidget(QLabel("<b>Тести у вибраному курсі:</b>"))
+        
+        # Блок Матеріалів
+        v_right.addWidget(QLabel("<b>Навчальні матеріали:</b>"))
+        self.materials_list = QListWidget()
+        v_right.addWidget(self.materials_list)
+        
+        self.open_mat_btn = QPushButton("👁️ Відкрити матеріал")
+        self.open_mat_btn.setStyleSheet("background-color: #FF9800; color: white; padding: 5px;")
+        self.open_mat_btn.clicked.connect(self.open_material)
+        v_right.addWidget(self.open_mat_btn)
+        
+        v_right.addWidget(QLabel("<hr><b>Доступні тести:</b>"))
         self.tests_list = QListWidget()
         v_right.addWidget(self.tests_list)
         
@@ -146,11 +160,12 @@ class StudentDashboard(QWidget):
         self.available_courses_list.clear()
         self.my_courses_list.clear()
         self.tests_list.clear()
+        self.materials_list.clear()
         
         db = database.load_db()
-        enrolled_ids = [e["course_id"] for e in db["enrollments"] if e["student_id"] == self.user["id"]]
+        enrolled_ids = [e["course_id"] for e in db.get("enrollments", []) if e["student_id"] == self.user["id"]]
         
-        for course in db["courses"]:
+        for course in db.get("courses", []):
             item = QListWidgetItem(course['title'])
             item.setData(32, course['id'])
             
@@ -168,27 +183,47 @@ class StudentDashboard(QWidget):
         course_id = selected_item.data(32)
         db = database.load_db()
         
-        db["enrollments"].append({"student_id": self.user["id"], "course_id": course_id})
+        db.setdefault("enrollments", []).append({"student_id": self.user["id"], "course_id": course_id})
         database.save_db(db)
         
         QMessageBox.information(self, "Успіх", "Ви приєдналися до курсу!")
         self.refresh_lists()
 
-    def load_course_tests(self):
-        """Завантажує тести для курсу, який студент обрав у списку 'Мої курси'"""
+    def load_course_content(self):
+        """Завантажує матеріали та тести для курсу, який студент обрав."""
         self.tests_list.clear()
+        self.materials_list.clear()
+        
         selected_item = self.my_courses_list.currentItem()
-        if not selected_item:
-            return
+        if not selected_item: return
             
         course_id = selected_item.data(32)
         db = database.load_db()
         
-        for test in db["tests"]:
+        for course in db.get("courses", []):
+            if course["id"] == course_id:
+                for mat in course.get("materials", []):
+                    item = QListWidgetItem(mat["name"])
+                    item.setData(32, mat["path"]) 
+                    self.materials_list.addItem(item)
+                break
+                
+        for test in db.get("tests", []):
             if test["course_id"] == course_id:
                 item = QListWidgetItem(f"{test['title']} (Питань: {len(test['questions'])})")
                 item.setData(32, test['id'])
                 self.tests_list.addItem(item)
+
+    def open_material(self):
+        selected = self.materials_list.currentItem()
+        if not selected:
+            QMessageBox.warning(self, "Увага", "Оберіть матеріал зі списку!")
+            return
+        file_path = selected.data(32)
+        if os.path.exists(file_path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(file_path)))
+        else:
+            QMessageBox.critical(self, "Помилка", "Файл не знайдено на сервері!")
 
     def start_test(self):
         selected_item = self.tests_list.currentItem()
@@ -200,7 +235,7 @@ class StudentDashboard(QWidget):
         db = database.load_db()
         
         test_data = None
-        for test in db["tests"]:
+        for test in db.get("tests", []):
             if test["id"] == test_id:
                 test_data = test
                 break

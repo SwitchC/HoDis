@@ -1,6 +1,10 @@
+import os
+import shutil
 from PyQt5.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, 
                              QLineEdit, QPushButton, QComboBox, QListWidget, 
-                             QMessageBox, QTabWidget)
+                             QMessageBox, QTabWidget, QFileDialog, QListWidgetItem)
+from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtCore import QUrl
 import database
 
 class TeacherDashboard(QWidget):
@@ -10,17 +14,16 @@ class TeacherDashboard(QWidget):
         self.current_questions = []
 
         self.setWindowTitle(f"HoDis - Панель Викладача ({self.user['username']})")
-        self.resize(600, 650)
+        self.resize(700, 750)
         
         main_layout = QVBoxLayout()
         
-        # Створюємо 3 вкладки
         self.tabs = QTabWidget()
         self.tab_course = QWidget()
         self.tab_test = QWidget()
         self.tab_stats = QWidget()
         
-        self.tabs.addTab(self.tab_course, "1. Створення курсу")
+        self.tabs.addTab(self.tab_course, "1. Управління курсами та файлами")
         self.tabs.addTab(self.tab_test, "2. Створення тесту")
         self.tabs.addTab(self.tab_stats, "3. Статистика")
         
@@ -31,13 +34,14 @@ class TeacherDashboard(QWidget):
         self.setup_test_tab()
         self.setup_stats_tab()
         
-        # Оновлюємо випадаючі списки при перемиканні вкладок
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.refresh_combo_boxes()
 
-    # --- Вкладка 1: Створення КУРСУ ---
+    # --- Вкладка 1: Управління курсами ---
     def setup_course_tab(self):
         layout = QVBoxLayout()
+        
+        # Блок створення курсу
         layout.addWidget(QLabel("<b>Назва нового курсу:</b>"))
         self.course_title_input = QLineEdit()
         self.course_title_input.setPlaceholderText("Наприклад: Програмування на Python")
@@ -48,10 +52,33 @@ class TeacherDashboard(QWidget):
         self.create_course_btn.clicked.connect(self.create_course)
         layout.addWidget(self.create_course_btn)
         
-        layout.addWidget(QLabel("<hr><b>Ваші курси:</b>"))
-        self.my_courses_list = QListWidget()
-        layout.addWidget(self.my_courses_list)
+        layout.addWidget(QLabel("<hr>"))
         
+        # Блок управління матеріалами (UR4, FR2 розширено)
+        layout.addWidget(QLabel("<b>Управління матеріалами курсу:</b>"))
+        self.material_course_combo = QComboBox()
+        self.material_course_combo.currentIndexChanged.connect(self.load_course_materials)
+        layout.addWidget(self.material_course_combo)
+        
+        self.materials_list = QListWidget()
+        layout.addWidget(self.materials_list)
+        
+        mat_btn_layout = QHBoxLayout()
+        self.open_mat_btn = QPushButton("👁️ Відкрити файл")
+        self.open_mat_btn.clicked.connect(self.open_material)
+        mat_btn_layout.addWidget(self.open_mat_btn)
+        
+        self.delete_mat_btn = QPushButton("🗑️ Видалити файл")
+        self.delete_mat_btn.setStyleSheet("background-color: #f44336; color: white;")
+        self.delete_mat_btn.clicked.connect(self.delete_material)
+        mat_btn_layout.addWidget(self.delete_mat_btn)
+        
+        self.upload_btn = QPushButton("📎 Завантажити новий")
+        self.upload_btn.setStyleSheet("background-color: #4CAF50; color: white;")
+        self.upload_btn.clicked.connect(self.upload_material)
+        mat_btn_layout.addWidget(self.upload_btn)
+        
+        layout.addLayout(mat_btn_layout)
         self.tab_course.setLayout(layout)
 
     def create_course(self):
@@ -61,14 +88,79 @@ class TeacherDashboard(QWidget):
             return
             
         db = database.load_db()
-        new_course_id = len(db["courses"]) + 1
-        course_data = {"id": new_course_id, "teacher_id": self.user["id"], "title": title}
+        new_course_id = len(db.get("courses", [])) + 1
+        course_data = {"id": new_course_id, "teacher_id": self.user["id"], "title": title, "materials": []}
         db["courses"].append(course_data)
         database.save_db(db)
         
         QMessageBox.information(self, "Успіх", f"Курс '{title}' створено!")
         self.course_title_input.clear()
         self.refresh_combo_boxes()
+
+    def load_course_materials(self):
+        self.materials_list.clear()
+        course_id = self.material_course_combo.currentData()
+        if not course_id: return
+        
+        db = database.load_db()
+        for course in db.get("courses", []):
+            if course["id"] == course_id:
+                for mat in course.get("materials", []):
+                    item = QListWidgetItem(mat["name"])
+                    item.setData(32, mat["path"]) # Зберігаємо шлях до файлу приховано
+                    self.materials_list.addItem(item)
+                break
+
+    def upload_material(self):
+        course_id = self.material_course_combo.currentData()
+        if not course_id:
+            QMessageBox.warning(self, "Помилка", "Спершу оберіть курс!")
+            return
+            
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Оберіть файл для курсу", "", "Навчальні матеріали (*.pdf *.docx *.mp4 *.png *.txt)"
+        )
+        
+        if file_path:
+            if not os.path.exists(database.UPLOAD_DIR):
+                os.makedirs(database.UPLOAD_DIR)
+                
+            file_name = os.path.basename(file_path)
+            dest_path = os.path.join(database.UPLOAD_DIR, file_name)
+            
+            try:
+                shutil.copy2(file_path, dest_path)
+                database.add_material_to_course(course_id, file_name, dest_path)
+                QMessageBox.information(self, "Успіх", f"Файл '{file_name}' успішно завантажено!")
+                self.load_course_materials() # Оновлюємо список
+            except Exception as e:
+                QMessageBox.critical(self, "Помилка", f"Не вдалося скопіювати файл:\n{str(e)}")
+
+    def open_material(self):
+        selected = self.materials_list.currentItem()
+        if not selected:
+            QMessageBox.warning(self, "Увага", "Оберіть файл зі списку!")
+            return
+        file_path = selected.data(32)
+        if os.path.exists(file_path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(file_path)))
+        else:
+            QMessageBox.critical(self, "Помилка", "Файл не знайдено на диску!")
+
+    def delete_material(self):
+        selected = self.materials_list.currentItem()
+        if not selected:
+            QMessageBox.warning(self, "Увага", "Оберіть файл для видалення!")
+            return
+            
+        course_id = self.material_course_combo.currentData()
+        file_path = selected.data(32)
+        
+        confirm = QMessageBox.question(self, "Підтвердження", "Видалити цей файл назавжди?", QMessageBox.Yes | QMessageBox.No)
+        if confirm == QMessageBox.Yes:
+            database.delete_material_from_course(course_id, file_path)
+            QMessageBox.information(self, "Успіх", "Файл видалено.")
+            self.load_course_materials()
 
     # --- Вкладка 2: Створення ТЕСТУ ---
     def setup_test_tab(self):
@@ -144,14 +236,14 @@ class TeacherDashboard(QWidget):
             return
             
         db = database.load_db()
-        new_test_id = len(db["tests"]) + 1
+        new_test_id = len(db.get("tests", [])) + 1
         test_data = {
             "id": new_test_id,
             "course_id": course_id,
             "title": title,
             "questions": self.current_questions
         }
-        db["tests"].append(test_data)
+        db.setdefault("tests", []).append(test_data)
         database.save_db(db)
         
         QMessageBox.information(self, "Успіх", f"Тест '{title}' збережено!")
@@ -185,7 +277,7 @@ class TeacherDashboard(QWidget):
         
         if course_id:
             db = database.load_db()
-            for test in db["tests"]:
+            for test in db.get("tests", []):
                 if test["course_id"] == course_id:
                     self.stats_test_combo.addItem(test["title"], test["id"])
                     
@@ -198,13 +290,13 @@ class TeacherDashboard(QWidget):
         if not test_id: return
             
         db = database.load_db()
-        results = [r for r in db["results"] if r["test_id"] == test_id]
+        results = [r for r in db.get("results", []) if r["test_id"] == test_id]
         
         if not results:
             self.stats_list.addItem("Ще немає результатів для цього тесту.")
             return
             
-        users = {u["id"]: u["username"] for u in db["users"]}
+        users = {u["id"]: u["username"] for u in db.get("users", [])}
         for r in results:
             student_name = users.get(r["student_id"], "Невідомий")
             status = "✅ Склав" if r["passed"] else "❌ Не склав"
@@ -215,16 +307,24 @@ class TeacherDashboard(QWidget):
         self.refresh_combo_boxes()
 
     def refresh_combo_boxes(self):
-        """Оновлює списки курсів у всіх вкладках"""
+        self.test_course_combo.blockSignals(True)
+        self.stats_course_combo.blockSignals(True)
+        self.material_course_combo.blockSignals(True)
+        
         self.test_course_combo.clear()
         self.stats_course_combo.clear()
-        self.my_courses_list.clear()
+        self.material_course_combo.clear()
         
         db = database.load_db()
-        for course in db["courses"]:
+        for course in db.get("courses", []):
             if course["teacher_id"] == self.user["id"]:
-                self.my_courses_list.addItem(f"Курс: {course['title']}")
                 self.test_course_combo.addItem(course["title"], course["id"])
                 self.stats_course_combo.addItem(course["title"], course["id"])
+                self.material_course_combo.addItem(course["title"], course["id"])
+        
+        self.test_course_combo.blockSignals(False)
+        self.stats_course_combo.blockSignals(False)
+        self.material_course_combo.blockSignals(False)
         
         self.update_stats_tests_combo()
+        self.load_course_materials()
