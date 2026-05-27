@@ -4,6 +4,7 @@ import database
 from auth_ui import LoginWindow
 from teacher_ui import TeacherDashboard
 from student_ui import StudentDashboard
+from admin_ui import AdminDashboard  # Додали імпорт інтерфейсу Адміністратора
 
 class HoDisApp:
     def __init__(self):
@@ -22,6 +23,8 @@ class HoDisApp:
             self.current_window = TeacherDashboard(user_data)
         elif user_data["role"] == "student":
             self.current_window = StudentDashboard(user_data)
+        elif user_data["role"] == "admin":
+            self.current_window = AdminDashboard(user_data)  # Відкриваємо панель адміна
             
         self.current_window.show()
 

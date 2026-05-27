@@ -10,7 +10,22 @@
             "id": 2,
             "username": "student1",
             "password": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
-            "role": "student"
+            "role": "student",
+            "is_blocked": false
+        },
+        {
+            "id": 3,
+            "username": "admin1",
+            "password": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+            "role": "admin",
+            "is_blocked": false
+        },
+        {
+            "id": 4,
+            "username": "student2",
+            "password": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+            "role": "student",
+            "is_blocked": false
         }
     ],
     "courses": [
