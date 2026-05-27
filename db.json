@@ -97,5 +97,23 @@
             "score": 33.33,
             "passed": false
         }
+    ],
+    "practical_tasks": [
+        {
+            "id": 1,
+            "course_id": 1,
+            "title": "Опанування бази",
+            "description": "Опис завдання"
+        }
+    ],
+    "task_submissions": [
+        {
+            "id": 1,
+            "student_id": 2,
+            "task_id": 1,
+            "answer_text": "Це база",
+            "status": "Оцінено",
+            "score": 35
+        }
     ]
 }
