@@ -50,7 +50,6 @@ class LoginWindow(QWidget):
         user = get_user_by_credentials(username, password)
 
         if user:
-            # ПЕРЕВІРКА НА БЛОКУВАННЯ (Вимога UR6)
             if user.get("is_blocked", False):
                 QMessageBox.critical(self, "Доступ заборонено", "Ваш акаунт було заблоковано Адміністратором.")
                 return

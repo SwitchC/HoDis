@@ -12,7 +12,8 @@ def init_db():
     if not os.path.exists(DB_FILE):
         data = {
             "users": [], "courses": [], "tests": [], "results": [],
-            "practical_tasks": [], "task_submissions": []
+            "practical_tasks": [], "task_submissions": [],
+            "settings": {"ml_enabled": True}
         }
         with open(DB_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
@@ -26,16 +27,32 @@ def load_db():
             db = json.load(f)
             if "practical_tasks" not in db: db["practical_tasks"] = []
             if "task_submissions" not in db: db["task_submissions"] = []
+            if "settings" not in db: db["settings"] = {"ml_enabled": True}
             return db
         except json.JSONDecodeError:
             return {
                 "users": [], "courses": [], "tests": [], "results": [],
-                "practical_tasks": [], "task_submissions": []
+                "practical_tasks": [], "task_submissions": [],
+                "settings": {"ml_enabled": True}
             }
 
 def save_db(data):
     with open(DB_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
+
+def get_ml_status():
+    """Повертає поточний стан ML-модуля (True/False)."""
+    db = load_db()
+    return db.get("settings", {}).get("ml_enabled", True)
+
+def toggle_ml_status():
+    """Перемикає стан ML-модуля та повертає новий статус."""
+    db = load_db()
+    settings = db.setdefault("settings", {})
+    current = settings.get("ml_enabled", True)
+    settings["ml_enabled"] = not current
+    save_db(db)
+    return not current
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
@@ -89,6 +106,17 @@ def delete_user(user_id):
     db['users'] = [u for u in db.get('users', []) if u['id'] != user_id]
     save_db(db)
     return True
+
+def create_default_admin():
+    db = load_db()
+    if not any(u.get('role') == 'admin' for u in db.get('users', [])):
+        users = db.get('users', [])
+        admin_id = 1 if not users else max(u['id'] for u in users) + 1
+        db['users'].append({
+            "id": admin_id, "username": "admin1", "password": hash_password("123"),
+            "role": "admin", "is_blocked": False
+        })
+        save_db(db)
 
 def add_material_to_course(course_id: int, file_name: str, file_path: str):
     db = load_db()
@@ -164,9 +192,7 @@ def delete_practical_task(task_id: int):
     save_db(db)
     return True
 
-# --- НОВА ФУНКЦІЯ ДЛЯ ЗБЕРЕЖЕННЯ ДЕТАЛЬНИХ РЕЗУЛЬТАТІВ ТЕСТУ ---
 def save_detailed_test_result(student_id: int, test_id: int, score: float, passed: bool, details: list):
-    """Зберігає не лише бал, а й масив відповідей з витраченим часом (FR5)."""
     db = load_db()
     result_record = {
         "id": len(db.get("results", [])) + 1,
@@ -174,7 +200,7 @@ def save_detailed_test_result(student_id: int, test_id: int, score: float, passe
         "test_id": test_id,
         "score": score,
         "passed": passed,
-        "details": details  # Тут зберігається весь масив
+        "details": details
     }
     db.setdefault("results", []).append(result_record)
     save_db(db)

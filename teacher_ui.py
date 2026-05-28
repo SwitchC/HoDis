@@ -9,7 +9,6 @@ from PyQt5.QtGui import QDesktopServices, QColor
 from PyQt5.QtCore import QUrl
 import database
 
-# --- НОВЕ ВІКНО ДЛЯ ПЕРЕГЛЯДУ ДЕТАЛЕЙ ТЕСТУ ---
 class ResultDetailsDialog(QDialog):
     def __init__(self, parent, result_data, student_name):
         super().__init__(parent)
@@ -123,7 +122,6 @@ class TeacherDashboard(QWidget):
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.refresh_combo_boxes()
 
-    # Вкладка 1: КУРСИ ТА МАТЕРІАЛИ
     def setup_course_tab(self):
         main_course_layout = QHBoxLayout()
         left_layout = QVBoxLayout()
@@ -222,7 +220,6 @@ class TeacherDashboard(QWidget):
         database.delete_material_from_course(course_id, file_path)
         self.load_course_materials()
 
-    # Вкладка 2: УПРАВЛІННЯ ТЕСТАМИ
     def setup_test_tab(self):
         main_test_layout = QHBoxLayout()
         left_layout = QVBoxLayout()
@@ -323,7 +320,6 @@ class TeacherDashboard(QWidget):
             self.load_existing_tests()
             self.update_stats_data()
 
-    # Вкладка 3: УПРАВЛІННЯ ПРАКТИЧНИМИ ЗАВДАННЯМИ
     def setup_tasks_tab(self):
         main_task_layout = QHBoxLayout()
         left_layout = QVBoxLayout()
@@ -389,7 +385,6 @@ class TeacherDashboard(QWidget):
             self.load_existing_tasks()
             self.update_stats_data()
 
-    # --- ОНОВЛЕНА Вкладка 4: СТАТИСТИКА ТА ПЕРЕВІРКА ---
     def setup_stats_tab(self):
         layout = QVBoxLayout()
         layout.addWidget(QLabel("<b>Оберіть курс для аналізу:</b>"))
@@ -397,7 +392,6 @@ class TeacherDashboard(QWidget):
         self.stats_course_combo.currentIndexChanged.connect(self.update_stats_data)
         layout.addWidget(self.stats_course_combo)
         
-        # Блок тестів з новою кнопкою деталізації
         layout.addWidget(QLabel("<hr><b>Статистика автоматичних тестів:</b>"))
         self.stats_test_combo = QComboBox()
         self.stats_test_combo.currentIndexChanged.connect(self.load_test_statistics)
@@ -411,7 +405,6 @@ class TeacherDashboard(QWidget):
         self.view_details_btn.clicked.connect(self.view_test_details)
         layout.addWidget(self.view_details_btn)
         
-        # Блок ручної перевірки завдань
         layout.addWidget(QLabel("<hr><b>Роботи студентів на перевірці:</b>"))
         self.submissions_list = QListWidget()
         layout.addWidget(self.submissions_list)
@@ -448,7 +441,7 @@ class TeacherDashboard(QWidget):
         for r in results:
             student_name = users.get(r['student_id'], 'Невідомий')
             item = QListWidgetItem(f"Студент: {student_name} | Оцінка: {r['score']}%")
-            item.setData(32, r) # Зберігаємо весь об'єкт результату (включаючи масив деталей)
+            item.setData(32, r)
             item.setData(33, student_name)
             self.stats_list.addItem(item)
 
