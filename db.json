@@ -340,6 +340,6 @@
         }
     ],
     "settings": {
-        "ml_enabled": false
+        "ml_enabled": true
     }
 }

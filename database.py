@@ -18,6 +18,8 @@ def init_db():
         with open(DB_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
         print("Базу даних ініціалізовано.")
+        
+        create_default_admin()
 
 def load_db():
     if not os.path.exists(DB_FILE):
